@@ -379,13 +379,33 @@ def build_report(dfs: dict, cfg: dict = None) -> dict:
     out_summary_q3 = out_summary(out_q3)
 
     # ── Circles ───────────────────────────────────────────────────
-    circles_raw['date'] = pd.to_datetime(circles_raw['Date of Training or Class'], errors='coerce')
+    # Normalize circles column names — Kintone form uses different names
+    col_map = {}
+    for col in circles_raw.columns:
+        cl = col.lower()
+        if 'date of circle' in cl or 'date of training' in cl:
+            col_map[col] = 'date_col'
+        elif 'name of circle' in cl or 'workshops' in cl or 'trainings' in cl:
+            col_map[col] = 'type_col'
+        elif 'number of' in cl and ('attendee' in cl or 'circle attendee' in cl or 'all attendee' in cl):
+            col_map[col] = 'att_col'
+        elif 'first and last name' in cl or 'attendee name' in cl:
+            col_map[col] = 'name_col'
+        elif 'zip' in cl and ('class' in cl or 'circle' in cl or 'school' in cl):
+            col_map[col] = 'zip_col'
+    circles_raw['_date']  = pd.to_datetime(circles_raw.get(
+        next((c for c,v in col_map.items() if v=='date_col'), None), pd.Series(dtype=str)), errors='coerce') if any(v=='date_col' for v in col_map.values()) else pd.NaT
+    circles_raw['_type']  = circles_raw.get(next((c for c,v in col_map.items() if v=='type_col'), None), pd.Series([''] * len(circles_raw)))
+    circles_raw['_att']   = circles_raw.get(next((c for c,v in col_map.items() if v=='att_col'), None), pd.Series([''] * len(circles_raw)))
+    circles_raw['_names'] = circles_raw.get(next((c for c,v in col_map.items() if v=='name_col'), None), pd.Series([''] * len(circles_raw)))
+    circles_raw['_zip']   = circles_raw.get(next((c for c,v in col_map.items() if v=='zip_col'), None), pd.Series([''] * len(circles_raw)))
+    circles_raw['date'] = circles_raw['_date']
     circles_raw['coordinator'] = circles_raw['Created by'].apply(email_name)
     circ_q3 = circles_raw[(circles_raw['date'] >= Q_START) & (circles_raw['date'] <= Q_END)].copy()
-    circ_sessions = circ_q3.groupby(['date','coordinator','Workshops / Trainings']).agg(
-        attendees=('Number of all attendees','first'),
-        attendee_names=('First and Last Name', lambda x: ', '.join(x.dropna().astype(str)))
-    ).reset_index().sort_values(['coordinator','date'])
+    circ_sessions = circ_q3.groupby(['date','coordinator','_type']).agg(
+        attendees=('_att','first'),
+        attendee_names=('_names', lambda x: ', '.join(x.dropna().astype(str).str.strip().replace('',pd.NA).dropna()))
+    ).reset_index().rename(columns={'_type': 'Workshops / Trainings'}).sort_values(['coordinator','date'])
     circ_summary = circ_sessions.groupby('coordinator').agg(
         total_events=('date','count'),
         total_attendees=('attendees', lambda x: pd.to_numeric(x, errors='coerce').fillna(0).sum())
@@ -974,7 +994,7 @@ def build_report(dfs: dict, cfg: dict = None) -> dict:
         for cc, v in enumerate([
                 r['date'].strftime('%m/%d/%Y') if pd.notna(r['date']) else '',
                 r['coordinator'], r['Workshops / Trainings'],
-                f"Zip {r.get('Zip code class was held','')}" if 'Zip code class was held' in r.index else '',
+                ss(r.get('_zip', '')),
                 int(att_val) if pd.notna(att_val) else '⚠ 0',
                 r['attendee_names'][:80] if r['attendee_names'] else '',
                 '⚠ 0 attendees' if zero_att else ''], 1):
