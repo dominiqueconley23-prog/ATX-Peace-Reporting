@@ -496,7 +496,7 @@ def build_report(dfs: dict, cfg: dict = None) -> dict:
     for opid in sorted(orphan_goal_pids):
         m = goals[goals['pid'] == opid].iloc[0]
         corrections.append(['Goal — No Participant Record','Goals Form',
-            ss(m.get('Assigned Coordinator','')).split('@')[0], opid,
+            email_name(ss(m.get('Assigned Coordinator',''))), opid,
             f"{ss(m.get('Client First Name',''))} {ss(m.get('Client Last Name',''))}",
             'Goal record exists but no matching participant folder. Verify PID in Kintone.'])
 
