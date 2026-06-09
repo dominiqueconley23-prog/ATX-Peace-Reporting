@@ -218,7 +218,6 @@ if st.button("🚀 Generate Report", type="primary", disabled=generate_disabled,
                delta=None if s['corrections'] == 0 else f"{s['corrections']} issues",
                delta_color="inverse")
 
-    st.columns(4)[0]  # spacer
     sc1, sc2, sc3, sc4 = st.columns(4)
     sc1.metric("Rollover Cases", s['rollover'])
     sc2.metric("Circles / Classes", s['circles'])
