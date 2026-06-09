@@ -161,7 +161,11 @@ if st.button("🚀 Generate Report", type="primary", disabled=generate_disabled,
             for key, f in all_files.items():
                 f.seek(0)
                 try:
-                    dfs[key] = pd.read_csv(f, low_memory=False)
+                    try:
+                        dfs[key] = pd.read_csv(f, low_memory=False, encoding='utf-8')
+                    except UnicodeDecodeError:
+                        f.seek(0)
+                        dfs[key] = pd.read_csv(f, low_memory=False, encoding='latin-1')
                 except Exception as e:
                     st.error(f"Error reading **{labels[key]}**: {e}")
                     st.stop()
