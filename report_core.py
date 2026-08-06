@@ -207,8 +207,10 @@ def build_report(dfs: dict, cfg: dict = None) -> dict:
     TARGET_5B = c['TARGET_5B']
     AGE_MIN   = c['AGE_MIN']
     AGE_MAX   = c['AGE_MAX']
-    WEEK_START = c['WEEK_START']
-    WEEK_END   = c['WEEK_END']
+    WEEK_START      = c['WEEK_START']
+    WEEK_END        = c['WEEK_END']
+    PREV_WEEK_START = WEEK_START - pd.Timedelta(days=7)
+    PREV_WEEK_END   = WEEK_END   - pd.Timedelta(days=7)
     QUOTA      = c['QUOTA']
     Q_LA_TARGET = c['Q_LA_TARGET']
     Q_QUOTA_CM  = c['Q_QUOTA_CM']
@@ -1039,83 +1041,124 @@ def build_report(dfs: dict, cfg: dict = None) -> dict:
         title_row(wsc, 1, 1, 14, f"ATX Peace {QUARTER} — {coord}  |  Updated {TODAY}")
         cr = 2
 
-        SEC(wsc, cr, 1, 14, f"THIS WEEK  ({WEEK_START.strftime('%b %-d')}–{WEEK_END.strftime('%-d, %Y')})", bg='1A5276'); cr += 1
+        SEC(wsc, cr, 1, 14,
+            f"PRIOR & CURRENT WEEK  "
+            f"({PREV_WEEK_START.strftime('%b %-d')}–{PREV_WEEK_END.strftime('%-d')}  /  "
+            f"{WEEK_START.strftime('%b %-d')}–{WEEK_END.strftime('%-d, %Y')})",
+            bg='1A5276'); cr += 1
 
-        fu_week_coord = fu_q3[(fu_q3['date'] >= WEEK_START) & (fu_q3['date'] <= WEEK_END) &
-                               (fu_q3['Assigned Coordinator'].apply(email_name) == coord)]
-        wsc.cell(row=cr, column=1, value='Follow-ups').font = Font(name='Arial', bold=True, size=10)
-        wsc.cell(row=cr, column=1).fill = PatternFill('solid', start_color=LBLUE)
-        wsc.cell(row=cr, column=1).alignment = Alignment(horizontal='left', vertical='center'); cr += 1
-        if fu_week_coord.empty:
-            cl = wsc.cell(row=cr, column=1, value='No follow-ups this week.')
-            cl.font = Font(name='Arial', size=10, italic=True, color='666666')
-            cl.fill = PatternFill('solid', start_color=LGR)
-            wsc.merge_cells(f'A{cr}:N{cr}'); cr += 1
-        else:
-            for _, r in fu_week_coord.sort_values('date').iterrows():
-                conn = r.get('Did you make connection with the participant?','')
-                conn_icon = '✅' if conn=='Connected' else ('❌' if pd.notna(conn) and conn else '—')
-                name  = f"{ss(r.get('Participant First Name',''))} {ss(r.get('Participant Last Name',''))}".strip()
-                date_s = r['date'].strftime('%m/%d') if pd.notna(r['date']) else ''
-                support = ss(r.get('What support did you give during this follow up?',''))
-                duration = ss(r.get('How long was follow up?',''))
-                summary = f"{date_s}  |  {name}  |  {conn_icon}  |  {support}  |  {duration}"
-                cl = wsc.cell(row=cr, column=1, value=summary)
-                cl.font = Font(name='Arial', size=10)
-                cl.fill = PatternFill('solid', start_color=GRN if conn=='Connected' else (RBKG if (pd.notna(conn) and conn) else LGR))
+        def week_label(start, end, label):
+            return f"{label}  ({start.strftime('%b %-d')}–{end.strftime('%-d')})"
+
+        def write_week_rows(wsc, cr, label, fu_rows, out_rows, circ_rows, week_bg):
+            """Write one week's block of follow-ups / outreach / circles."""
+            # Sub-header
+            for col in range(1, 15):
+                cl = wsc.cell(row=cr, column=col, value=label if col == 1 else '')
+                cl.font = Font(name='Arial', bold=True, size=9, color=WHT)
+                cl.fill = PatternFill('solid', start_color=week_bg)
                 cl.alignment = Alignment(horizontal='left', vertical='center')
-                wsc.merge_cells(f'A{cr}:N{cr}'); wsc.row_dimensions[cr].height = 16; cr += 1
-
-        out_week_coord = out_q3[(out_q3['date'] >= WEEK_START) & (out_q3['date'] <= WEEK_END) &
-                                 (out_q3['coordinator'] == coord)]
-        wsc.cell(row=cr, column=1, value='Outreach & Canvass').font = Font(name='Arial', bold=True, size=10)
-        wsc.cell(row=cr, column=1).fill = PatternFill('solid', start_color=LBLUE)
-        wsc.cell(row=cr, column=1).alignment = Alignment(horizontal='left', vertical='center'); cr += 1
-        if out_week_coord.empty:
-            cl = wsc.cell(row=cr, column=1, value='No outreach or canvass this week.')
-            cl.font = Font(name='Arial', size=10, italic=True, color='666666')
-            cl.fill = PatternFill('solid', start_color=LGR)
             wsc.merge_cells(f'A{cr}:N{cr}'); cr += 1
-        else:
-            for _, r in out_week_coord.sort_values('date').iterrows():
-                date_s = r['date'].strftime('%m/%d') if pd.notna(r['date']) else ''
-                people = int(r['people']) if r['people'] > 0 else '0 logged'
-                summary = f"{date_s}  |  {r['out_type']}  |  {r['out_hrs']:.0f}h out / {r['can_hrs']:.0f}h can  |  {people} people"
-                cl = wsc.cell(row=cr, column=1, value=summary)
-                cl.font = Font(name='Arial', size=10); cl.fill = PatternFill('solid', start_color=TEAL)
-                cl.alignment = Alignment(horizontal='left', vertical='center')
-                wsc.merge_cells(f'A{cr}:N{cr}'); wsc.row_dimensions[cr].height = 16; cr += 1
 
-        circ_week_coord = circ_sessions[(circ_sessions['date'] >= WEEK_START) &
-                                         (circ_sessions['date'] <= WEEK_END) &
-                                         (circ_sessions['coordinator'] == coord)]
-        wsc.cell(row=cr, column=1, value='Circles & Classes').font = Font(name='Arial', bold=True, size=10)
-        wsc.cell(row=cr, column=1).fill = PatternFill('solid', start_color=LBLUE)
-        wsc.cell(row=cr, column=1).alignment = Alignment(horizontal='left', vertical='center'); cr += 1
-        if circ_week_coord.empty:
-            cl = wsc.cell(row=cr, column=1, value='No circles or classes this week.')
-            cl.font = Font(name='Arial', size=10, italic=True, color='666666')
-            cl.fill = PatternFill('solid', start_color=LGR)
-            wsc.merge_cells(f'A{cr}:N{cr}'); cr += 1
-        else:
-            for _, r in circ_week_coord.sort_values('date').iterrows():
-                date_s = r['date'].strftime('%m/%d') if pd.notna(r['date']) else ''
-                att = pd.to_numeric(r['attendees'], errors='coerce')
-                names = r['attendee_names'][:80] if r['attendee_names'] else ''
-                summary = f"{date_s} | {r['Workshops / Trainings']} | {int(att) if pd.notna(att) else 0} attendees" + (f" — {names}" if names else '')
-                cl = wsc.cell(row=cr, column=1, value=summary)
-                cl.font = Font(name='Arial', size=10); cl.fill = PatternFill('solid', start_color=PURPLE)
-                cl.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
-                wsc.merge_cells(f'A{cr}:N{cr}'); wsc.row_dimensions[cr].height = 14; cr += 1
+            # Follow-ups
+            wsc.cell(row=cr, column=1, value='Follow-ups').font = Font(name='Arial', bold=True, size=10)
+            wsc.cell(row=cr, column=1).fill = PatternFill('solid', start_color=LBLUE)
+            wsc.cell(row=cr, column=1).alignment = Alignment(horizontal='left', vertical='center'); cr += 1
+            if fu_rows.empty:
+                cl = wsc.cell(row=cr, column=1, value='No follow-ups.')
+                cl.font = Font(name='Arial', size=10, italic=True, color='666666')
+                cl.fill = PatternFill('solid', start_color=LGR)
+                wsc.merge_cells(f'A{cr}:N{cr}'); cr += 1
+            else:
+                for _, r in fu_rows.sort_values('date').iterrows():
+                    conn = r.get('Did you make connection with the participant?','')
+                    conn_icon = '✅' if conn=='Connected' else ('❌' if pd.notna(conn) and conn else '—')
+                    name  = f"{ss(r.get('Participant First Name',''))} {ss(r.get('Participant Last Name',''))}".strip()
+                    date_s = r['date'].strftime('%m/%d') if pd.notna(r['date']) else ''
+                    support  = ss(r.get('What support did you give during this follow up?',''))
+                    duration = ss(r.get('How long was follow up?',''))
+                    summary  = f"{date_s}  |  {name}  |  {conn_icon}  |  {support}  |  {duration}"
+                    cl = wsc.cell(row=cr, column=1, value=summary)
+                    cl.font = Font(name='Arial', size=10)
+                    cl.fill = PatternFill('solid', start_color=GRN if conn=='Connected' else (RBKG if (pd.notna(conn) and conn) else LGR))
+                    cl.alignment = Alignment(horizontal='left', vertical='center')
+                    wsc.merge_cells(f'A{cr}:N{cr}'); wsc.row_dimensions[cr].height = 16; cr += 1
+
+            # Outreach & Canvass
+            wsc.cell(row=cr, column=1, value='Outreach & Canvass').font = Font(name='Arial', bold=True, size=10)
+            wsc.cell(row=cr, column=1).fill = PatternFill('solid', start_color=LBLUE)
+            wsc.cell(row=cr, column=1).alignment = Alignment(horizontal='left', vertical='center'); cr += 1
+            if out_rows.empty:
+                cl = wsc.cell(row=cr, column=1, value='No outreach or canvass.')
+                cl.font = Font(name='Arial', size=10, italic=True, color='666666')
+                cl.fill = PatternFill('solid', start_color=LGR)
+                wsc.merge_cells(f'A{cr}:N{cr}'); cr += 1
+            else:
+                for _, r in out_rows.sort_values('date').iterrows():
+                    date_s = r['date'].strftime('%m/%d') if pd.notna(r['date']) else ''
+                    people = int(r['people']) if r['people'] > 0 else '0 logged'
+                    summary = f"{date_s}  |  {r['out_type']}  |  {r['out_hrs']:.0f}h out / {r['can_hrs']:.0f}h can  |  {people} people"
+                    cl = wsc.cell(row=cr, column=1, value=summary)
+                    cl.font = Font(name='Arial', size=10); cl.fill = PatternFill('solid', start_color=TEAL)
+                    cl.alignment = Alignment(horizontal='left', vertical='center')
+                    wsc.merge_cells(f'A{cr}:N{cr}'); wsc.row_dimensions[cr].height = 16; cr += 1
+
+            # Circles & Classes
+            wsc.cell(row=cr, column=1, value='Circles & Classes').font = Font(name='Arial', bold=True, size=10)
+            wsc.cell(row=cr, column=1).fill = PatternFill('solid', start_color=LBLUE)
+            wsc.cell(row=cr, column=1).alignment = Alignment(horizontal='left', vertical='center'); cr += 1
+            if circ_rows.empty:
+                cl = wsc.cell(row=cr, column=1, value='No circles or classes.')
+                cl.font = Font(name='Arial', size=10, italic=True, color='666666')
+                cl.fill = PatternFill('solid', start_color=LGR)
+                wsc.merge_cells(f'A{cr}:N{cr}'); cr += 1
+            else:
+                for _, r in circ_rows.sort_values('date').iterrows():
+                    date_s = r['date'].strftime('%m/%d') if pd.notna(r['date']) else ''
+                    att = pd.to_numeric(r['attendees'], errors='coerce')
+                    names = r['attendee_names'][:80] if r['attendee_names'] else ''
+                    summary = f"{date_s} | {r['Workshops / Trainings']} | {int(att) if pd.notna(att) else 0} attendees" + (f" — {names}" if names else '')
+                    cl = wsc.cell(row=cr, column=1, value=summary)
+                    cl.font = Font(name='Arial', size=10); cl.fill = PatternFill('solid', start_color=PURPLE)
+                    cl.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
+                    wsc.merge_cells(f'A{cr}:N{cr}'); wsc.row_dimensions[cr].height = 14; cr += 1
+            return cr
+
+        # Prior week
+        cr = write_week_rows(
+            wsc, cr,
+            week_label(PREV_WEEK_START, PREV_WEEK_END, "PRIOR WEEK"),
+            fu_q3[(fu_q3['date'] >= PREV_WEEK_START) & (fu_q3['date'] <= PREV_WEEK_END) &
+                  (fu_q3['Assigned Coordinator'].apply(email_name) == coord)],
+            out_q3[(out_q3['date'] >= PREV_WEEK_START) & (out_q3['date'] <= PREV_WEEK_END) &
+                   (out_q3['coordinator'] == coord)],
+            circ_sessions[(circ_sessions['date'] >= PREV_WEEK_START) & (circ_sessions['date'] <= PREV_WEEK_END) &
+                          (circ_sessions['coordinator'] == coord)],
+            week_bg='2471A3',
+        )
+
+        # Current week
+        cr = write_week_rows(
+            wsc, cr,
+            week_label(WEEK_START, WEEK_END, "CURRENT WEEK"),
+            fu_q3[(fu_q3['date'] >= WEEK_START) & (fu_q3['date'] <= WEEK_END) &
+                  (fu_q3['Assigned Coordinator'].apply(email_name) == coord)],
+            out_q3[(out_q3['date'] >= WEEK_START) & (out_q3['date'] <= WEEK_END) &
+                   (out_q3['coordinator'] == coord)],
+            circ_sessions[(circ_sessions['date'] >= WEEK_START) & (circ_sessions['date'] <= WEEK_END) &
+                          (circ_sessions['coordinator'] == coord)],
+            week_bg='1A5276',
+        )
 
         cr += 1
 
         # Q3 participants table
         q3c = q3_elig[q3_elig['coordinator'] == coord].sort_values('Last Name')
+        last_fu_date = fu_q3.groupby('pid')['date'].max()  # most recent follow-up per PID
         SEC(wsc, cr, 1, 14, f"{QUARTER} CASE-MANAGED PARTICIPANTS ({len(q3c)}) — {QUARTER} PMRQ", bg=DARK_GRN); cr += 1
         for cc, h in enumerate(['PID','First Name','Last Name','Age','Gender','Race','Zip','Case Start',
                                   'Goals','Completed\nGoals','In Prog','Pre','Post','Flags',
-                                  'Follow-ups\n(connected/total)'], 1):
+                                  'Follow-ups\n(connected/total)','Last\nFollow-up'], 1):
             H(wsc, cr, cc, h, bg=LBLUE, fg='000000', wrap=True, sz=9)
         wsc.row_dimensions[cr].height = 28; cr += 1
         if q3c.empty:
@@ -1132,6 +1175,8 @@ def build_report(dfs: dict, cfg: dict = None) -> dict:
                 fu_total = len(p_fu)
                 fu_conn  = (p_fu['Did you make connection with the participant?'] == 'Connected').sum()
                 fu_val   = f"{fu_conn} / {fu_total}"
+                last_fu  = last_fu_date.get(pid)
+                last_fu_s = last_fu.strftime('%m/%d/%Y') if pd.notna(last_fu) else '—'
                 bg = TEAL if not flags else (LGR if cr % 2 == 0 else WHT)
                 for cc, v in enumerate([pid, ss(r.get('First Name','')), ss(r.get('Last Name','')),
                         ss(r.get('Current Age','')), ss(r.get('Gender Identity','')),
@@ -1141,14 +1186,15 @@ def build_report(dfs: dict, cfg: dict = None) -> dict:
                         '✓' if pid in pre_pids_all else '⚠',
                         '✓' if pid in post_pids_all else '⚠',
                         ' | '.join(flags) if flags else '✓',
-                        fu_val], 1):
+                        fu_val, last_fu_s], 1):
                     cl = wsc.cell(row=cr, column=cc, value=v)
                     cl.font = Font(name='Arial', size=10); cl.fill = PatternFill('solid', start_color=bg)
-                    cl.alignment = Alignment(horizontal='center' if cc in [9,10,11,12,13,15] else 'left',
+                    cl.alignment = Alignment(horizontal='center' if cc in [9,10,11,12,13,15,16] else 'left',
                                              vertical='center', wrap_text=(cc==14))
                     if cc in [12,13] and v=='⚠': cl.fill = PatternFill('solid', start_color=LBLUE)
                     if cc==14 and '⚠' in str(v): cl.fill = PatternFill('solid', start_color=ORG)
                     if cc==15 and fu_total==0: cl.fill = PatternFill('solid', start_color=RBKG)
+                    if cc==16 and last_fu_s=='—': cl.fill = PatternFill('solid', start_color=RBKG)
                 cr += 1
 
         # Ineligible
@@ -1176,7 +1222,7 @@ def build_report(dfs: dict, cfg: dict = None) -> dict:
         SEC(wsc, cr, 1, 14, f"ROLLOVER — IN PROGRESS FROM PRIOR QUARTERS ({len(rolc)}) — Review for closure", bg='2E75B6'); cr += 1
         for cc, h in enumerate(['PID','First Name','Last Name','Age','Case Start','Goals','Completed\nGoals',
                                   'Goal Categories','Status','Pre','Post','','Flags',
-                                  'Follow-ups\n(connected/total)'], 1):
+                                  'Follow-ups\n(connected/total)','Last\nFollow-up'], 1):
             H(wsc, cr, cc, h, bg=LBLUE, fg='000000', wrap=True, sz=9)
         wsc.row_dimensions[cr].height = 24; cr += 1
         if rolc.empty:
@@ -1191,6 +1237,8 @@ def build_report(dfs: dict, cfg: dict = None) -> dict:
                 fu_rol_tot = len(p_fu_rol)
                 fu_rol_con = (p_fu_rol['Did you make connection with the participant?'] == 'Connected').sum()
                 fu_rol_val = f"{fu_rol_con} / {fu_rol_tot}"
+                last_fu_rol   = last_fu_date.get(pid)
+                last_fu_rol_s = last_fu_rol.strftime('%m/%d/%Y') if pd.notna(last_fu_rol) else '—'
                 for cc, v in enumerate([pid, ss(r.get('First Name','')), ss(r.get('Last Name','')),
                         ss(r.get('Current Age','')),
                         r['case_start'].strftime('%m/%d/%Y') if pd.notna(r.get('case_start')) else '',
@@ -1199,15 +1247,17 @@ def build_report(dfs: dict, cfg: dict = None) -> dict:
                         '✓' if pid in pre_pids_all else '—',
                         '✓' if pid in post_pids_all else '—',
                         '', ' | '.join(flags) if flags else 'Active — verify still open',
-                        fu_rol_val], 1):
+                        fu_rol_val, last_fu_rol_s], 1):
                     cl = wsc.cell(row=cr, column=cc, value=v)
                     cl.font = Font(name='Arial', size=10, color='444444')
                     cl.fill = PatternFill('solid', start_color=ORG if '⚠' in str(v) else ROLLOVER_BG)
-                    cl.alignment = Alignment(horizontal='center' if cc in [6,7,10,11,14] else 'left',
+                    cl.alignment = Alignment(horizontal='center' if cc in [6,7,10,11,14,15] else 'left',
                                              vertical='center', wrap_text=(cc==13))
                     if cc==14 and fu_rol_tot==0:
                         cl.fill = PatternFill('solid', start_color=RBKG)
                         cl.font = Font(name='Arial', size=10, bold=True, color=DRED)
+                    if cc==15 and last_fu_rol_s=='—':
+                        cl.fill = PatternFill('solid', start_color=RBKG)
                 cr += 1
 
         # Outreach log
